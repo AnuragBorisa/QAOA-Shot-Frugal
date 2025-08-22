@@ -1,0 +1,6 @@
+numpy
+matplotlib
+networkx
+qiskit
+qiskit-aer
+cvxpy    # optional; for Goemans–Williamson baseline
