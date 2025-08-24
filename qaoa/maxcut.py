@@ -34,6 +34,7 @@ def expectation_from_counts(counts:Dict[str,float],H:SparsePauliOp)->float:
         
         z = [1 if s[q]== "0" else -1 for q in range(n)]
         for pauli , coeff in H_terms:
+            coeff = float(np.real_if_close(coeff))
             eig = 1 
             for q , p in enumerate(pauli[::-1]):
                 if p == "Z":

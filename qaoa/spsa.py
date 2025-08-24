@@ -91,6 +91,8 @@ class ShotFrugalSPSA(SPSA):
         best_val = float('inf')
         best_params = params.copy()
 
+        
+
         for k in range(maxiter):
             params , aux = self.step_pair(obj_pair,params,k,**obj_kwargs)
             eval_current = obj_kwargs.get("eval_current")
@@ -98,27 +100,13 @@ class ShotFrugalSPSA(SPSA):
             if eval_current is None:
                 val = aux['fp']
             else:
-                val,_ = eval_current(params)
-                history["value"].append(val)
-                history['params'].append(params)
-                history["aux"].append(aux)
+                val,_ = eval_current(params,k)
+            history["value"].append(val)
+            history['params'].append(params)
+            history["aux"].append(aux)
 
-                if val < best_val :
+            if val < best_val :
                     best_val , best_params = val , params.copy()
 
         return best_params , {"best_val":best_val,"history":history}
-    
-
-
-
-
-
-
-
-
-    
-
-
-
-
     

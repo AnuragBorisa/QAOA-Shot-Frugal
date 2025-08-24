@@ -27,10 +27,19 @@ def evaluate_params(params:np.ndarray,n:int,edges,sampler:AerSampler,H):
     qc = qaoa_circuit(n,edges,gammas,betas)
     result = sampler.run(qc).result()
     counts = result.quasi_dists[0]
-    val = expectation_from_counts(counts,H)
+    val = -expectation_from_counts(counts, H) 
 
     best_str = max(counts,key=counts.get) if len(counts)>0 else "0"*n
     return val , {"counts":counts,"best_str":best_str}
+
+def make_eval_current(n,edges,H,method:str="density_matrix"):
+
+    def _eval(params:np.ndarray,k:int):
+        shots = max(256,default_shots_schedule(k)//2)
+        seed = default_seed_schedule(k) + 991
+        sampler = make_aer_sampler(shots,seed,method)
+        return evaluate_params(params,n,edges,sampler,H)
+    return _eval
 
 def objective_pair(
         theta_plus:np.ndarray,
@@ -42,13 +51,14 @@ def objective_pair(
         H,
         shots_schedule=default_shots_schedule,
         seed_schedule=default_seed_schedule,
-        method:str = "density_matrix"
+        method:str = "density_matrix",
+        **kwargs,
 )->tuple[float,float,dict,dict]:
     p = len(theta_plus) // 2 
     gammas_p , betas_p = theta_plus[:p] , theta_plus[p:]
     gammas_n , betas_n = theta_minus[:p] ,theta_minus[p:]
 
-    qcp = qaoa_circuit(n,edges,gammas_p,gammas_n)
+    qcp = qaoa_circuit(n,edges,gammas_p,betas_p)
     qcm = qaoa_circuit(n,edges,gammas_n,betas_n)
 
     shots = shots_schedule(k)
@@ -60,22 +70,17 @@ def objective_pair(
     counts_p = res.quasi_dists[0]
     counts_m = res.quasi_dists[1]
 
-    fp = expectation_from_counts(counts_p,H)
-    fm = expectation_from_counts(counts_m,H)
+    fp = -expectation_from_counts(counts_p,H)
+    fm = -expectation_from_counts(counts_m,H)
 
     auxp = {"counts": counts_p, "shots": shots, "seed": seed}
     auxm = {"counts": counts_m, "shots": shots, "seed": seed}
 
     return fp,fm,auxp,auxm
 
-def make_eval_current(n,edges,H,method:str="density_matrix"):
-
-    def _eval(params:np.ndarray,k:int):
-        shots = max(256,default_shots_schedule(k)//2)
-        seed = default_seed_schedule(k) + 991
-        sampler = make_aer_sampler(shots,seed,method)
-        return evaluate_params(params,n,edges,sampler,H)
-    return _eval
+def display_str(k, n: int) -> str:
+    s = k if isinstance(k, str) else format(int(k), f"0{n}b")
+    return s[::-1]
 
 def main():
     n = 6
@@ -88,7 +93,7 @@ def main():
     opt_cut = brute_force_maxcut(G)
     print(f"Brute-force optimum cut: {opt_cut}")
 
-    p = 2
+    p = 4
 
     x0 = np.concatenate([np.full(p,0.8),np.full(p,0.4)])
 
@@ -106,19 +111,26 @@ def main():
 
     best_params , info = spsa.minimise_pair(objective_pair,x0,maxiter=150,**obj_kwargs)
     values = info["history"]["value"]
+    values_plot = [-v for v in values] 
 
     final_sampler = make_aer_sampler(shots=4096, seed=777, method="density_matrix")
     final_val, final_aux = evaluate_params(best_params, n, edges, final_sampler, H)
-    best_str = final_aux["best_str"]
-    best_cut = bitstring_to_cut_value(best_str, edges)
+    raw_best = final_aux["best_str"]                  
+    best_str_pretty = display_str(raw_best, n) 
+    # best_str = final_aux["best_str"]
+    best_cut = bitstring_to_cut_value(raw_best, edges)
     ratio = approx_ratio(best_cut, opt_cut)
+    
+    print(f"Best objective (-E[cut]): {final_val:.4f}")
+    print(f"Best bitstring: {best_str_pretty}  cut={best_cut}  approx ratio={ratio:.3f}")
+    est_Ecut = -final_val
+    print(f"Estimated E[cut]: {est_Ecut:.3f}")
 
-    print(f"Best <H>: {final_val:.4f}")
-    print(f"Best bitstring: {best_str}  cut={best_cut}  approx ratio={ratio:.3f}")
-
-    plt.plot(values, marker=".")
+    plt.plot(values_plot, marker=".")
     plt.xlabel("Iteration")
-    plt.ylabel("Objective  ⟨H⟩  (lower is better)")
+    plt.ylabel("E[cut] (higher is better)")
+    plt.axhline(opt_cut, ls="--", lw=1, alpha=0.6, label=f"opt cut = {opt_cut}")
+    plt.legend()
     plt.title(f"QAOA p={p} on 3-regular n={n} (Shot-frugal SPSA)")
     plt.tight_layout()
     plt.show()
