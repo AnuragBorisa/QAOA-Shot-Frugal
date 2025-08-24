@@ -1,6 +1,6 @@
 from __future__ import annotations
 import numpy as np
-from typing import Callable,Dict,List,Tuple
+from typing import Callable,Dict,List,Tuple,Any
 
 #type: callable(params)->(value,aux)
 Objective = Callable[[np.ndarray],Tuple[float,Dict]]
@@ -30,7 +30,7 @@ class SPSA:
         fp , auxp = obj(thetap)
         fm , auxm = obj(thetam)
 
-        ghat = (fp-fn)/(2.0 * ck) * (1.0 / Delta)
+        ghat = (fp-fm)/(2.0 * ck) * (1.0 / Delta)
         ak = self.ak(k)
         new_params = params - ak * ghat
 
@@ -54,7 +54,68 @@ class SPSA:
                 best_val ,best_params = val , params.copy()
             
         return best_params,{"best_val":best_val,"history":history}
-        
+    
+    def default_shots_schedule(k:int ,base:int=256,growth:float=0.5,cap:int=4096)->int:
+        return int(min(cap,base*((1+k) ** growth)))
+    
+    def default_seed_schedule(k:int,base_seed:int=12345)->int:
+        return int(base_seed+k)
+    
+
+class ShotFrugalSPSA(SPSA):
+
+    def step_pair(self,obj_pair:ObjectivePair,params:np.ndarray,k:int,**obj_kwargs:Any)->Tuple[np.ndarray,Dict]:
+        d = len(params)
+        Delta = self.rng.choice([-1.0,1.0],size=d)
+        ck = self.ck(k)
+        thetap = params + ck * Delta
+        thetam = params - ck * Delta
+
+        fp,fm,auxp,auxm = obj_pair(thetap,thetam,k,**obj_kwargs)
+
+        ghat = (fp-fm)/(2.0 * ck) *(1/Delta)
+
+        ak = self.ak(k)
+        new_params = params - ak*ghat
+
+        aux = {
+            "fp": fp, "fm": fm, "ghat": ghat, "ak": ak, "ck": ck,
+            "auxp": auxp, "auxm": auxm, "Delta": Delta
+        }
+
+        return new_params , aux 
+    
+    def minimise_pair(self,obj_pair:ObjectivePair,x0:np.ndarray,maxiter:int=200,**obj_kwargs:Any)->Tuple[np.ndarray,Dict]:
+        params = x0.copy()
+        history = {"value":[],"params":[],"aux":[]}
+        best_val = float('inf')
+        best_params = params.copy()
+
+        for k in range(maxiter):
+            params , aux = self.step_pair(obj_pair,params,k,**obj_kwargs)
+            eval_current = obj_kwargs.get("eval_current")
+            
+            if eval_current is None:
+                val = aux['fp']
+            else:
+                val,_ = eval_current(params)
+                history["value"].append(val)
+                history['params'].append(params)
+                history["aux"].append(aux)
+
+                if val < best_val :
+                    best_val , best_params = val , params.copy()
+
+        return best_params , {"best_val":best_val,"history":history}
+    
+    
+
+
+
+
+
+
+
     
 
 
