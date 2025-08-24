@@ -55,10 +55,10 @@ class SPSA:
             
         return best_params,{"best_val":best_val,"history":history}
     
-    def default_shots_schedule(k:int ,base:int=256,growth:float=0.5,cap:int=4096)->int:
+def default_shots_schedule(k:int ,base:int=256,growth:float=0.5,cap:int=4096)->int:
         return int(min(cap,base*((1+k) ** growth)))
     
-    def default_seed_schedule(k:int,base_seed:int=12345)->int:
+def default_seed_schedule(k:int,base_seed:int=12345)->int:
         return int(base_seed+k)
     
 
@@ -108,7 +108,7 @@ class ShotFrugalSPSA(SPSA):
 
         return best_params , {"best_val":best_val,"history":history}
     
-    
+
 
 
 
