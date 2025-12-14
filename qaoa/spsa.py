@@ -1,11 +1,15 @@
 from __future__ import annotations
 import numpy as np
-from typing import Callable,Dict,List,Tuple,Any
+from typing import Callable,Dict,List,Tuple,Any,Optional
 
-#type: callable(params)->(value,aux)
+
 Objective = Callable[[np.ndarray],Tuple[float,Dict]]
-#type: callable(theta_plus,theta_minus,k,**kwargs)->(fp,fn,auxp,auxn)
+
 ObjectivePair = Callable[[np.ndarray,np.ndarray,int],Tuple[float,float,Dict,Dict]]
+
+
+Callback = Callable[[int, np.ndarray, float, Dict], None]
+
 
 class SPSA:
 
@@ -85,28 +89,38 @@ class ShotFrugalSPSA(SPSA):
 
         return new_params , aux 
     
-    def minimise_pair(self,obj_pair:ObjectivePair,x0:np.ndarray,maxiter:int=200,**obj_kwargs:Any)->Tuple[np.ndarray,Dict]:
+    def minimise_pair(
+        self,
+        obj_pair:ObjectivePair,
+        x0:np.ndarray,
+        maxiter:int=200,
+        callback: Optional[Callback] = None,
+        **obj_kwargs:Any
+    )->Tuple[np.ndarray,Dict]:
+        
         params = x0.copy()
-        history = {"value":[],"params":[],"aux":[]}
+        history: Dict[str, List[Any]] = {"value": [], "params": [], "aux": []}
         best_val = float('inf')
         best_params = params.copy()
 
-        
+        eval_current = obj_kwargs.get("eval_current")
 
         for k in range(maxiter):
             params , aux = self.step_pair(obj_pair,params,k,**obj_kwargs)
-            eval_current = obj_kwargs.get("eval_current")
-            
+
             if eval_current is None:
-                val = aux['fp']
+                val = aux["fp"]
             else:
                 val,_ = eval_current(params,k)
+
             history["value"].append(val)
-            history['params'].append(params)
+            history["params"].append(params.copy())
             history["aux"].append(aux)
 
+            if callback is not None:
+                callback(k, params, val, aux)
+
             if val < best_val :
-                    best_val , best_params = val , params.copy()
+                best_val , best_params = val , params.copy()
 
         return best_params , {"best_val":best_val,"history":history}
-    
